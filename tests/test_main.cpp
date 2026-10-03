@@ -123,6 +123,17 @@ int main() {
         CHECK(h.route("/api/status", st, ct).find("\"overload_w\":5000") != std::string::npos);
         CHECK(h.route("/api/history", st, ct).find("\"t\":[") != std::string::npos);
     });
+    run("analytics: restart clears everything", [] {
+        Analytics a(Config{}, noon_wall(), 0); a.start();
+        for (int i = 0; i < 20; ++i) a.on_pulse(uint64_t(i) * 4 * S);
+        CHECK(a.snapshot().pulses == 20);
+        a.reset(noon_wall(), 100 * S); a.start();
+        auto s = a.snapshot();
+        CHECK(s.pulses == 0); NEAR(s.energy_kwh, 0.0, 1e-12); NEAR(s.cost, 0.0, 1e-12); NEAR(s.peak_w, 0.0, 1e-12);
+        CHECK(s.state == State::Idle); CHECK(a.history(10).empty());
+        a.on_pulse(100 * S); a.on_pulse(104 * S);
+        CHECK(a.snapshot().pulses == 2);
+    });
     run("integration: simulator -> queue -> analytics matches ground truth", [] {
         SimSource sim(1000.0, 600.0, 12.0, true); PulseQueue q;
         CHECK(sim.start(q));

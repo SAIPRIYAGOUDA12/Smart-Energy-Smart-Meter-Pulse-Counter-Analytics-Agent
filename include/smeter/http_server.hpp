@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <atomic>
+#include <functional>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -58,6 +59,7 @@ class HttpServer {
 public:
     HttpServer(Analytics& a, uint16_t port, std::string bind = "127.0.0.1") : a_(a), port_(port), bind_(std::move(bind)) {}
     ~HttpServer() { stop(); }
+    void set_restart_handler(std::function<void()> f) { on_restart_ = std::move(f); }
 
     bool start() {
         fd_ = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -118,7 +120,13 @@ private:
                 std::istringstream is(req);
                 is >> method >> path;
                 int st; std::string ct;
-                std::string body = method == "GET" ? route(path, st, ct) : (st = 405, ct = "text/plain", "method not allowed\n");
+                std::string body;
+                if (method == "GET") body = route(path, st, ct);
+                else if (method == "POST" && path == "/api/restart") {
+                    // custom header forces a CORS preflight, so other websites cannot trigger a restart
+                    if (req.find("X-Smeter:") == std::string::npos) { st = 403; ct = "application/json"; body = "{\"error\":\"missing X-Smeter header\"}"; }
+                    else { if (on_restart_) on_restart_(); st = 200; ct = "application/json"; body = "{\"ok\":true}"; }
+                } else { st = 405; ct = "text/plain"; body = "method not allowed\n"; }
                 std::ostringstream r;
                 r << "HTTP/1.1 " << st << (st == 200 ? " OK" : " Error") << "\r\nContent-Type: " << ct
                   << "\r\nContent-Length: " << body.size() << "\r\nConnection: close\r\n\r\n" << body;
@@ -129,6 +137,7 @@ private:
         }
     }
     Analytics& a_;
+    std::function<void()> on_restart_;
     uint16_t port_;
     std::string bind_;
     int fd_ = -1;

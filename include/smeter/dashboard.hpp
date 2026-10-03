@@ -33,7 +33,7 @@ li.a{border-color:var(--warn)}li.o{border-color:var(--bad)}li.g{border-color:var
 </style></head><body>
 <div id="err">Cannot reach smeterd - retrying...</div>
 <header><h1>&#9889; Smart Meter Agent</h1><span id="src" class="sub"></span><span id="clock" class="sub"></span>
-<span id="state" class="badge INIT">INIT</span><button id="pause">&#10074;&#10074; Pause</button></header>
+<span id="state" class="badge INIT">INIT</span><button id="pause">&#10074;&#10074; Pause</button><button id="restart" style="border-color:var(--bad);color:var(--bad)">&#8635; Restart</button></header>
 <main>
 <div class="card"><h3>Power now</h3><div class="big" id="pw">-</div><div class="sub" id="sm"></div><div class="bar"><i id="bar"></i></div><div class="sub" id="lim"></div></div>
 <div class="card"><h3>Energy</h3><div class="big" id="en">-</div><div class="sub" id="pl"></div></div>
@@ -95,6 +95,11 @@ async function poll(){
   const h=await (await fetch('/api/history?n='+range)).json();lastHist=h;renderHist();
  }catch(e){$('err').style.display='block';}
 }
+$('restart').onclick=async()=>{
+ if(!confirm('Restart the meter?\n\nEnergy, cost, history and events will be reset to zero and the simulation starts again.'))return;
+ try{const r=await fetch('/api/restart',{method:'POST',headers:{'X-Smeter':'1'}});if(!r.ok)throw 0;
+  liveY=[];liveX=[];lastHist=null;live.set([],[]);hist.set([],[]);setTimeout(poll,300);}
+ catch(e){alert('Restart failed - is smeterd running?');}};
 $('pause').onclick=()=>{paused=!paused;$('pause').innerHTML=paused?'&#9654; Resume':'&#10074;&#10074; Pause';$('pause').classList.toggle('on',paused);};
 document.querySelectorAll('#metric button').forEach(b=>b.onclick=()=>{metric=b.dataset.m;document.querySelectorAll('#metric button').forEach(x=>x.classList.toggle('on',x===b));renderHist();});
 document.querySelectorAll('#range button').forEach(b=>b.onclick=()=>{range=+b.dataset.n;document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));poll();});

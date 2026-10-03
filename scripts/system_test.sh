@@ -10,6 +10,12 @@ curl -sf localhost:$PORT/healthz | grep -q ok
 curl -sf localhost:$PORT/api/status | tee "$D/s1.json" | grep -q '"state":"MEASURING\|"state":"OVERLOAD'
 curl -sf localhost:$PORT/metrics | grep -q smeter_energy_kwh_total
 ./build/smeter-cli --port $PORT --once
+# restart button: must be rejected without header, accepted with it, and reset counters
+test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:$PORT/api/restart)" = 403
+curl -sf -X POST -H 'X-Smeter: 1' localhost:$PORT/api/restart | grep -q '"ok":true'
+sleep 1
+curl -sf localhost:$PORT/api/status | grep -q 'meter restarted by user'
+echo "restart endpoint OK"
 wait $PID || true
 test -f "$D/smeter.state" && test -f "$D/energy_minutes.csv"
 E1=$(grep energy_wh "$D/smeter.state" | cut -d= -f2)

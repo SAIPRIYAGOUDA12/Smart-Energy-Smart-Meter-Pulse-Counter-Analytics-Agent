@@ -59,6 +59,18 @@ public:
     }
     void start() { std::lock_guard<std::mutex> l(m_); note(sm_.on_start()); }
 
+    /// Restart the meter: clears counters, history, events and state; re-bases the clocks.
+    void reset(double wall0_s, uint64_t ts0_ns) {
+        std::lock_guard<std::mutex> l(m_);
+        sm_ = StateMachine(cfg_.overload_w);
+        wall0_ = wall0_s; ts0_ = ts0_ns; now_ts_ = 0; last_ts_ = 0;
+        have_last_ = have_ewma_ = false;
+        pulses_ = debounced_ = out_of_order_ = spikes_ = 0;
+        energy_wh_ = cost_ = inst_w_ = smooth_w_ = peak_w_ = 0;
+        win_.clear(); events_.clear(); hist_.clear(); cur_ = Bucket{};
+        push_event("meter restarted by user");
+    }
+
     void on_pulse(uint64_t ts) {
         std::lock_guard<std::mutex> l(m_);
         if (have_last_ && ts < last_ts_) { ++out_of_order_; return; }

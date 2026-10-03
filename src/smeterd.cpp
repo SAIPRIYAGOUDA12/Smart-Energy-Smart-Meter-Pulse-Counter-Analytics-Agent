@@ -1,4 +1,5 @@
 // smeterd - Smart-meter pulse counter & analytics agent (daemon)
+#include <atomic>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
@@ -87,7 +88,9 @@ int main(int argc, char** argv) {
     }
     an.start();
 
+    std::atomic<bool> restart_req{false};
     HttpServer http(an, static_cast<uint16_t>(port), bind);
+    http.set_restart_handler([&] { restart_req = true; });
     if (!http.start()) { std::cerr << "cannot start HTTP server\n"; return 1; }
     std::cout << "[smeterd] source=" << src->name() << "  http://" << bind << ":" << port << "/api/status\n";
 
@@ -102,6 +105,17 @@ int main(int argc, char** argv) {
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         while (auto p = q.pop()) an.on_pulse(p->ts_ns);   // drain lock-free queue
+        if (restart_req.exchange(false)) {              // user pressed "Restart" in the dashboard
+            src->stop();
+            while (q.pop()) {}
+            src->failed = false; fault_reported = false;
+            if (!src->start(q)) { std::cerr << "restart: cannot start pulse source\n"; an.on_source_error(); fault_reported = true; }
+            an.reset(src->wall_start_s(), src->now_ns());
+            an.start();
+            store.save_state({0, 0.0, 0.0});
+            std::cout << "[smeterd] meter restarted from dashboard\n";
+            continue;
+        }
         an.tick(src->now_ns());
         if (src->failed && !fault_reported) { an.on_source_error(); fault_reported = true; }
         const uint64_t now = mono_ns();

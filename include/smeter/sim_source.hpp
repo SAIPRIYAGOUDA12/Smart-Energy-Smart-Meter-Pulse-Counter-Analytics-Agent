@@ -17,6 +17,7 @@ public:
 
     bool start(PulseQueue& q) override {
         t0_real_ = mono_ns();
+        truth_wh_ = 0;
         run_ = true;
         th_ = std::thread([this, &q] { loop(q); });
         return true;
