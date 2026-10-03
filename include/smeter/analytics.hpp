@@ -39,7 +39,7 @@ struct Snapshot {
     std::string source;
     uint64_t pulses = 0, debounced = 0, out_of_order = 0, spikes = 0;
     double energy_kwh = 0, power_w = 0, smooth_w = 0, peak_w = 0, cost = 0, rate = 0;
-    double wall_s = 0;
+    double wall_s = 0, overload_w = 0;
     std::vector<std::string> events;
 };
 
@@ -117,6 +117,7 @@ public:
         s.peak_w = peak_w_; s.cost = cost_;
         s.wall_s = wall_of(now_ts_ ? now_ts_ : ts0_);
         s.rate = rate_at(s.wall_s);
+        s.overload_w = cfg_.overload_w;
         s.events.assign(events_.begin(), events_.end());
         return s;
     }

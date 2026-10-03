@@ -37,7 +37,7 @@ the driver layer is the user-space GPIO uAPI behind a pluggable `PulseSource` HA
 ## Project layout
 ```
 include/smeter/   common, ring_buffer, pulse_source (HAL), gpio_source, sim_source,
-                  analytics, state_machine, storage, http_server
+                  analytics, state_machine, storage, http_server, dashboard (embedded web UI)
 src/              smeterd.cpp (daemon) · smeter_cli.cpp (dashboard) · pulse_injector.cpp (gpio-sim driver)
 tests/            test_main.cpp (unit + integration)
 scripts/          system_test.sh · gpio_sim_setup.sh
@@ -55,6 +55,9 @@ curl localhost:8099/api/status
 curl localhost:8099/api/history?n=30
 curl localhost:8099/metrics            # Prometheus format
 ```
+**Interactive web dashboard:** open <http://127.0.0.1:8099/> in a browser (served by `smeterd` itself, no extra tools).
+Live power chart with hover values and overload line, per-minute history (Avg/Peak/Energy, 15m-24h ranges), state badge,
+event log, pause/resume and CSV export.
 Real hardware (e.g. Raspberry Pi, meter LED via photodiode/optocoupler on GPIO 17):
 ```bash
 sudo ./build/smeterd --gpio /dev/gpiochip0 17 --imp 1000
@@ -63,6 +66,7 @@ Options: `./build/smeterd --help`.
 
 | Endpoint | Description |
 |---|---|
+| `/` | interactive web dashboard |
 | `/api/status` | state, power, energy, cost, counters, recent events |
 | `/api/history?n=60` | per-minute avg/peak watts and Wh |
 | `/metrics` | Prometheus exposition |

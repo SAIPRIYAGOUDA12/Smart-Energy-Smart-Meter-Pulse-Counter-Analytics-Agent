@@ -12,6 +12,7 @@
 #include <sstream>
 #include <thread>
 #include "smeter/analytics.hpp"
+#include "smeter/dashboard.hpp"
 
 namespace sm {
 
@@ -22,7 +23,7 @@ inline std::string json_status(const Snapshot& s) {
       << ",\"power_w\":" << s.power_w << ",\"smooth_w\":" << s.smooth_w << ",\"peak_w\":" << s.peak_w
       << ",\"energy_kwh\":" << s.energy_kwh << ",\"cost\":" << s.cost << ",\"rate\":" << s.rate
       << ",\"pulses\":" << s.pulses << ",\"debounced\":" << s.debounced << ",\"out_of_order\":" << s.out_of_order
-      << ",\"spikes\":" << s.spikes << ",\"wall_s\":" << std::setprecision(0) << s.wall_s << ",\"events\":[";
+      << ",\"spikes\":" << s.spikes << ",\"overload_w\":" << s.overload_w << ",\"wall_s\":" << std::setprecision(0) << s.wall_s << ",\"events\":[";
     for (size_t i = 0; i < s.events.size(); ++i) o << (i ? "," : "") << "\"" << s.events[i] << "\"";
     o << "]}";
     return o.str();
@@ -30,7 +31,9 @@ inline std::string json_status(const Snapshot& s) {
 
 inline std::string json_history(const std::vector<Bucket>& h) {
     std::ostringstream o;
-    o << std::fixed << std::setprecision(2) << "{\"avg_w\":[";
+    o << std::fixed << std::setprecision(2) << "{\"t\":[";
+    for (size_t i = 0; i < h.size(); ++i) o << (i ? "," : "") << h[i].minute * 60;
+    o << "],\"avg_w\":[";
     for (size_t i = 0; i < h.size(); ++i) o << (i ? "," : "") << h[i].avg_w();
     o << "],\"energy_wh\":[";
     for (size_t i = 0; i < h.size(); ++i) o << (i ? "," : "") << h[i].wh;
@@ -83,6 +86,7 @@ public:
     /// Route a request path to (status, content-type, body). Public for testing.
     std::string route(const std::string& path, int& status, std::string& ctype) const {
         status = 200; ctype = "application/json";
+        if (path == "/" || path == "/index.html") { ctype = "text/html; charset=utf-8"; return dashboard_html(); }
         if (path == "/api/status") return json_status(a_.snapshot());
         if (path.rfind("/api/history", 0) == 0) {
             std::size_t n = 60;

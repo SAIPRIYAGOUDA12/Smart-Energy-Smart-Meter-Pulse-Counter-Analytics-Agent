@@ -119,6 +119,9 @@ int main() {
         auto j = h.route("/api/status", st, ct); CHECK(st == 200); CHECK(j.find("\"pulses\":2") != std::string::npos);
         CHECK(h.route("/metrics", st, ct).find("smeter_pulses_total 2") != std::string::npos);
         h.route("/nope", st, ct); CHECK(st == 404);
+        auto page = h.route("/", st, ct); CHECK(st == 200); CHECK(ct.find("text/html") == 0); CHECK(page.find("<canvas") != std::string::npos);
+        CHECK(h.route("/api/status", st, ct).find("\"overload_w\":5000") != std::string::npos);
+        CHECK(h.route("/api/history", st, ct).find("\"t\":[") != std::string::npos);
     });
     run("integration: simulator -> queue -> analytics matches ground truth", [] {
         SimSource sim(1000.0, 600.0, 12.0, true); PulseQueue q;
