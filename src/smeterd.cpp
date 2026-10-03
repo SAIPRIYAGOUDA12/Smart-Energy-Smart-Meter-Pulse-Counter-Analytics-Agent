@@ -1,6 +1,8 @@
 // smeterd - Smart-meter pulse counter & analytics agent (daemon)
 #include <atomic>
 #include <csignal>
+#include <cstdio>
+#include <unistd.h>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -87,10 +89,12 @@ int main(int argc, char** argv) {
         std::cout << "[smeterd] restored counter: " << ps.pulses << " pulses, " << ps.energy_wh / 1000 << " kWh\n";
     }
     an.start();
+    if (std::getenv("SMETERD_RESTARTED")) an.log_event("daemon restarted (totals restored)");
 
-    std::atomic<bool> restart_req{false};
+    std::atomic<bool> restart_req{false}, reset_req{false};
     HttpServer http(an, static_cast<uint16_t>(port), bind);
-    http.set_restart_handler([&] { restart_req = true; });
+    http.set_restart_handler([&] { restart_req = true; });   // whole-daemon restart (re-exec)
+    http.set_reset_handler([&] { reset_req = true; });       // counters reset only
     if (!http.start()) { std::cerr << "cannot start HTTP server\n"; return 1; }
     std::cout << "[smeterd] source=" << src->name() << "  http://" << bind << ":" << port << "/api/status\n";
 
@@ -105,7 +109,8 @@ int main(int argc, char** argv) {
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         while (auto p = q.pop()) an.on_pulse(p->ts_ns);   // drain lock-free queue
-        if (restart_req.exchange(false)) {              // user pressed "Restart" in the dashboard
+        if (restart_req) break;                            // whole-daemon restart: leave loop, clean up, re-exec below
+        if (reset_req.exchange(false)) {                // "Reset counters" in the dashboard
             src->stop();
             while (q.pop()) {}
             src->failed = false; fault_reported = false;
@@ -113,7 +118,7 @@ int main(int argc, char** argv) {
             an.reset(src->wall_start_s(), src->now_ns());
             an.start();
             store.save_state({0, 0.0, 0.0});
-            std::cout << "[smeterd] meter restarted from dashboard\n";
+            std::cout << "[smeterd] counters reset from dashboard\n";
             continue;
         }
         an.tick(src->now_ns());
@@ -128,5 +133,14 @@ int main(int argc, char** argv) {
     http.stop();
     while (auto p = q.pop()) an.on_pulse(p->ts_ns);
     save();
+    if (restart_req) {                                   // replace this process with a fresh copy (same PID)
+        std::cout << "[smeterd] restarting daemon...\n" << std::flush;
+        setenv("SMETERD_RESTARTED", "1", 1);
+        char path[4096];
+        ssize_t n = readlink("/proc/self/exe", path, sizeof path - 1);
+        if (n > 0) { path[n] = 0; execv(path, argv); }
+        std::perror("[smeterd] re-exec failed");
+        return 1;
+    }
     return 0;
 }

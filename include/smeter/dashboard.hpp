@@ -33,7 +33,7 @@ li.a{border-color:var(--warn)}li.o{border-color:var(--bad)}li.g{border-color:var
 </style></head><body>
 <div id="err">Cannot reach smeterd - retrying...</div>
 <header><h1>&#9889; Smart Meter Agent</h1><span id="src" class="sub"></span><span id="clock" class="sub"></span>
-<span id="state" class="badge INIT">INIT</span><button id="pause">&#10074;&#10074; Pause</button><button id="restart" style="border-color:var(--bad);color:var(--bad)">&#8635; Restart</button></header>
+<span id="state" class="badge INIT">INIT</span><button id="pause">&#10074;&#10074; Pause</button><button id="reset">&#10226; Reset counters</button><button id="restart" style="border-color:var(--bad);color:var(--bad)">&#8635; Restart daemon</button></header>
 <main>
 <div class="card"><h3>Power now</h3><div class="big" id="pw">-</div><div class="sub" id="sm"></div><div class="bar"><i id="bar"></i></div><div class="sub" id="lim"></div></div>
 <div class="card"><h3>Energy</h3><div class="big" id="en">-</div><div class="sub" id="pl"></div></div>
@@ -80,7 +80,7 @@ const units={avg_w:'W',peak_w:'W',energy_wh:'Wh'};
 function renderHist(){if(!lastHist)return;hist.unit=units[metric];hist.set(lastHist[metric],lastHist.t.map(t=>hhmm(t)));}
 async function poll(){
  try{
-  const s=await (await fetch('/api/status')).json();lastStatus=s;$('err').style.display='none';
+  const s=await (await fetch('/api/status')).json();lastStatus=s;$('err').style.display='none';restarting=false;restarting=false;
   $('state').textContent=s.state;$('state').className='badge '+s.state;$('src').textContent=s.source;$('clock').textContent='meter time '+hhmm(s.wall_s);
   $('pw').textContent=s.power_w.toFixed(0)+' W';$('sm').textContent='smoothed '+s.smooth_w.toFixed(0)+' W';
   const pct=Math.min(100,s.power_w/s.overload_w*100);$('bar').style.width=pct+'%';$('bar').style.background=pct>90?cs('--bad'):pct>60?cs('--warn'):cs('--ok');
@@ -93,13 +93,19 @@ async function poll(){
   liveY.push(s.power_w);liveX.push(new Date().toTimeString().slice(0,8));if(liveY.length>120){liveY.shift();liveX.shift();}
   live.limit=s.overload_w;live.set(liveY.slice(),liveX.slice());
   const h=await (await fetch('/api/history?n='+range)).json();lastHist=h;renderHist();
- }catch(e){$('err').style.display='block';}
+ }catch(e){$('err').textContent=restarting?'Restarting daemon... reconnecting automatically':'Cannot reach smeterd - retrying...';$('err').style.display='block';}
 }
+let restarting=false;
+const post=async p=>{const r=await fetch(p,{method:'POST',headers:{'X-Smeter':'1'}});if(!r.ok)throw 0;};
 $('restart').onclick=async()=>{
- if(!confirm('Restart the meter?\n\nEnergy, cost, history and events will be reset to zero and the simulation starts again.'))return;
- try{const r=await fetch('/api/restart',{method:'POST',headers:{'X-Smeter':'1'}});if(!r.ok)throw 0;
-  liveY=[];liveX=[];lastHist=null;live.set([],[]);hist.set([],[]);setTimeout(poll,300);}
+ if(!confirm('Restart the smeterd daemon?\n\nThe whole program restarts (a few seconds). Energy and cost totals are kept; live charts and history start fresh.'))return;
+ try{await post('/api/restart');restarting=true;liveY=[];liveX=[];lastHist=null;live.set([],[]);hist.set([],[]);
+  $('err').textContent='Restarting daemon... reconnecting automatically';$('err').style.display='block';}
  catch(e){alert('Restart failed - is smeterd running?');}};
+$('reset').onclick=async()=>{
+ if(!confirm('Reset counters?\n\nEnergy, cost, history and events go back to zero and the simulation restarts.'))return;
+ try{await post('/api/reset');liveY=[];liveX=[];lastHist=null;live.set([],[]);hist.set([],[]);setTimeout(poll,300);}
+ catch(e){alert('Reset failed - is smeterd running?');}};
 $('pause').onclick=()=>{paused=!paused;$('pause').innerHTML=paused?'&#9654; Resume':'&#10074;&#10074; Pause';$('pause').classList.toggle('on',paused);};
 document.querySelectorAll('#metric button').forEach(b=>b.onclick=()=>{metric=b.dataset.m;document.querySelectorAll('#metric button').forEach(x=>x.classList.toggle('on',x===b));renderHist();});
 document.querySelectorAll('#range button').forEach(b=>b.onclick=()=>{range=+b.dataset.n;document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));poll();});

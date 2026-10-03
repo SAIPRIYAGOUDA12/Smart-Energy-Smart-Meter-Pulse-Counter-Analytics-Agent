@@ -71,7 +71,8 @@ Options: `./build/smeterd --help`.
 | `/api/history?n=60` | per-minute avg/peak watts and Wh |
 | `/metrics` | Prometheus exposition |
 | `/healthz` | liveness |
-| `POST /api/restart` | restart the meter (clears counters/history); needs header `X-Smeter: 1`; used by the dashboard **Restart** button |
+| `POST /api/restart` | restart the whole `smeterd` process (clean shutdown, save totals, re-exec, same PID); needs header `X-Smeter: 1`; dashboard **Restart daemon** button |
+| `POST /api/reset` | zero counters/history and restart the simulation; dashboard **Reset counters** button |
 
 Data in `./data`: `smeter.state` (crash-safe counter) and `energy_minutes.csv`.
 

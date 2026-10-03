@@ -58,6 +58,7 @@ public:
         pulses_ = pulses; energy_wh_ = energy_wh; cost_ = cost;
     }
     void start() { std::lock_guard<std::mutex> l(m_); note(sm_.on_start()); }
+    void log_event(const std::string& e) { std::lock_guard<std::mutex> l(m_); push_event(e); }
 
     /// Restart the meter: clears counters, history, events and state; re-bases the clocks.
     void reset(double wall0_s, uint64_t ts0_ns) {
@@ -68,7 +69,7 @@ public:
         pulses_ = debounced_ = out_of_order_ = spikes_ = 0;
         energy_wh_ = cost_ = inst_w_ = smooth_w_ = peak_w_ = 0;
         win_.clear(); events_.clear(); hist_.clear(); cur_ = Bucket{};
-        push_event("meter restarted by user");
+        push_event("counters reset by user");
     }
 
     void on_pulse(uint64_t ts) {
