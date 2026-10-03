@@ -31,6 +31,7 @@ li.a{border-color:var(--warn)}li.o{border-color:var(--bad)}li.g{border-color:var
 #err{display:none;background:var(--bad);color:#fff;padding:8px 20px;font-weight:600}
 @media(max-width:900px){main{grid-template-columns:1fr 1fr}.wide,.half{grid-column:span 2}}
 </style></head><body>
+<div id="dlg" style="display:none;position:fixed;inset:0;background:#0009;align-items:center;justify-content:center;z-index:9"><div class="card" style="max-width:380px;margin:16px"><div id="dmsg" style="white-space:pre-line;margin-bottom:14px"></div><div style="text-align:right"><button id="dno">Cancel</button> <button id="dyes" class="on">OK</button></div></div></div>
 <div id="err">Cannot reach smeterd - retrying...</div>
 <header><h1>&#9889; Smart Meter Agent</h1><span id="src" class="sub"></span><span id="clock" class="sub"></span>
 <span id="state" class="badge INIT">INIT</span><button id="pause">&#10074;&#10074; Pause</button><button id="reset">&#10226; Reset counters</button><button id="restart" style="border-color:var(--bad);color:var(--bad)">&#8635; Restart daemon</button></header>
@@ -96,16 +97,18 @@ async function poll(){
  }catch(e){$('err').textContent=restarting?'Restarting daemon... reconnecting automatically':'Cannot reach smeterd - retrying...';$('err').style.display='block';}
 }
 let restarting=false;
+const ask=m=>new Promise(r=>{$('dmsg').textContent=m;$('dlg').style.display='flex';const done=v=>{$('dlg').style.display='none';r(v);};$('dyes').onclick=()=>done(true);$('dno').onclick=()=>done(false);});
+const toast=m=>{$('err').textContent=m;$('err').style.display='block';setTimeout(()=>{$('err').style.display='none';},3000);};
 const post=async p=>{const r=await fetch(p,{method:'POST',headers:{'X-Smeter':'1'}});if(!r.ok)throw 0;};
 $('restart').onclick=async()=>{
- if(!confirm('Restart the smeterd daemon?\n\nThe whole program restarts (a few seconds). Energy and cost totals are kept; live charts and history start fresh.'))return;
+ if(!await ask('Restart the smeterd daemon?\n\nThe whole program restarts (a few seconds). Energy and cost totals are kept; live charts and history start fresh.'))return;
  try{await post('/api/restart');restarting=true;liveY=[];liveX=[];lastHist=null;live.set([],[]);hist.set([],[]);
   $('err').textContent='Restarting daemon... reconnecting automatically';$('err').style.display='block';}
- catch(e){alert('Restart failed - is smeterd running?');}};
+ catch(e){toast('Restart failed - is smeterd running?');}};
 $('reset').onclick=async()=>{
- if(!confirm('Reset counters?\n\nEnergy, cost, history and events go back to zero and the simulation restarts.'))return;
+ if(!await ask('Reset counters?\n\nEnergy, cost, history and events go back to zero and the simulation restarts.'))return;
  try{await post('/api/reset');liveY=[];liveX=[];lastHist=null;live.set([],[]);hist.set([],[]);setTimeout(poll,300);}
- catch(e){alert('Reset failed - is smeterd running?');}};
+ catch(e){toast('Reset failed - is smeterd running?');}};
 $('pause').onclick=()=>{paused=!paused;$('pause').innerHTML=paused?'&#9654; Resume':'&#10074;&#10074; Pause';$('pause').classList.toggle('on',paused);};
 document.querySelectorAll('#metric button').forEach(b=>b.onclick=()=>{metric=b.dataset.m;document.querySelectorAll('#metric button').forEach(x=>x.classList.toggle('on',x===b));renderHist();});
 document.querySelectorAll('#range button').forEach(b=>b.onclick=()=>{range=+b.dataset.n;document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));poll();});
