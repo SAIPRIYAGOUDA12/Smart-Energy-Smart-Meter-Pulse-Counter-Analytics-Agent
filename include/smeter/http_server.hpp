@@ -1,0 +1,135 @@
+#pragma once
+// Minimal single-threaded HTTP/1.1 server on raw POSIX sockets (no external deps).
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <atomic>
+#include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <thread>
+#include "smeter/analytics.hpp"
+
+namespace sm {
+
+inline std::string json_status(const Snapshot& s) {
+    std::ostringstream o;
+    o << std::fixed << std::setprecision(3);
+    o << "{\"state\":\"" << to_string(s.state) << "\",\"source\":\"" << s.source << "\""
+      << ",\"power_w\":" << s.power_w << ",\"smooth_w\":" << s.smooth_w << ",\"peak_w\":" << s.peak_w
+      << ",\"energy_kwh\":" << s.energy_kwh << ",\"cost\":" << s.cost << ",\"rate\":" << s.rate
+      << ",\"pulses\":" << s.pulses << ",\"debounced\":" << s.debounced << ",\"out_of_order\":" << s.out_of_order
+      << ",\"spikes\":" << s.spikes << ",\"wall_s\":" << std::setprecision(0) << s.wall_s << ",\"events\":[";
+    for (size_t i = 0; i < s.events.size(); ++i) o << (i ? "," : "") << "\"" << s.events[i] << "\"";
+    o << "]}";
+    return o.str();
+}
+
+inline std::string json_history(const std::vector<Bucket>& h) {
+    std::ostringstream o;
+    o << std::fixed << std::setprecision(2) << "{\"avg_w\":[";
+    for (size_t i = 0; i < h.size(); ++i) o << (i ? "," : "") << h[i].avg_w();
+    o << "],\"energy_wh\":[";
+    for (size_t i = 0; i < h.size(); ++i) o << (i ? "," : "") << h[i].wh;
+    o << "],\"peak_w\":[";
+    for (size_t i = 0; i < h.size(); ++i) o << (i ? "," : "") << h[i].peak_w;
+    o << "]}";
+    return o.str();
+}
+
+inline std::string prometheus(const Snapshot& s) {
+    std::ostringstream o;
+    o << "# TYPE smeter_power_watts gauge\nsmeter_power_watts " << s.power_w
+      << "\n# TYPE smeter_energy_kwh_total counter\nsmeter_energy_kwh_total " << s.energy_kwh
+      << "\n# TYPE smeter_pulses_total counter\nsmeter_pulses_total " << s.pulses
+      << "\n# TYPE smeter_spikes_total counter\nsmeter_spikes_total " << s.spikes
+      << "\n# TYPE smeter_cost_total counter\nsmeter_cost_total " << s.cost
+      << "\n# TYPE smeter_state gauge\nsmeter_state " << static_cast<int>(s.state) << "\n";
+    return o.str();
+}
+
+class HttpServer {
+public:
+    HttpServer(Analytics& a, uint16_t port, std::string bind = "127.0.0.1") : a_(a), port_(port), bind_(std::move(bind)) {}
+    ~HttpServer() { stop(); }
+
+    bool start() {
+        fd_ = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        if (fd_ < 0) return false;
+        int one = 1;
+        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port_);
+        inet_pton(AF_INET, bind_.c_str(), &addr.sin_addr);
+        if (bind(fd_, reinterpret_cast<sockaddr*>(&addr), sizeof addr) < 0 || listen(fd_, 16) < 0) {
+            std::cerr << "[http] bind/listen: " << std::strerror(errno) << "\n";
+            ::close(fd_); fd_ = -1;
+            return false;
+        }
+        run_ = true;
+        th_ = std::thread([this] { loop(); });
+        return true;
+    }
+    void stop() {
+        run_ = false;
+        if (th_.joinable()) th_.join();
+        if (fd_ >= 0) { ::close(fd_); fd_ = -1; }
+    }
+
+    /// Route a request path to (status, content-type, body). Public for testing.
+    std::string route(const std::string& path, int& status, std::string& ctype) const {
+        status = 200; ctype = "application/json";
+        if (path == "/api/status") return json_status(a_.snapshot());
+        if (path.rfind("/api/history", 0) == 0) {
+            std::size_t n = 60;
+            auto q = path.find("n=");
+            if (q != std::string::npos) n = std::min<std::size_t>(1440, std::strtoul(path.c_str() + q + 2, nullptr, 10));
+            return json_history(a_.history(n));
+        }
+        if (path == "/metrics") { ctype = "text/plain; version=0.0.4"; return prometheus(a_.snapshot()); }
+        if (path == "/healthz") { ctype = "text/plain"; return "ok\n"; }
+        status = 404;
+        return "{\"error\":\"not found\"}";
+    }
+
+private:
+    void loop() {
+        while (run_) {
+            pollfd p{fd_, POLLIN, 0};
+            if (poll(&p, 1, 200) <= 0) continue;
+            int c = ::accept4(fd_, nullptr, nullptr, SOCK_CLOEXEC);
+            if (c < 0) continue;
+            timeval tv{1, 0};
+            setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+            char buf[2048];
+            ssize_t n = ::recv(c, buf, sizeof buf - 1, 0);
+            if (n > 0) {
+                buf[n] = 0;
+                std::string req(buf);
+                std::string method, path;
+                std::istringstream is(req);
+                is >> method >> path;
+                int st; std::string ct;
+                std::string body = method == "GET" ? route(path, st, ct) : (st = 405, ct = "text/plain", "method not allowed\n");
+                std::ostringstream r;
+                r << "HTTP/1.1 " << st << (st == 200 ? " OK" : " Error") << "\r\nContent-Type: " << ct
+                  << "\r\nContent-Length: " << body.size() << "\r\nConnection: close\r\n\r\n" << body;
+                const std::string out = r.str();
+                (void)!::send(c, out.data(), out.size(), MSG_NOSIGNAL);
+            }
+            ::close(c);
+        }
+    }
+    Analytics& a_;
+    uint16_t port_;
+    std::string bind_;
+    int fd_ = -1;
+    std::atomic<bool> run_{false};
+    std::thread th_;
+};
+
+}  // namespace sm
