@@ -1,6 +1,8 @@
 // smeterd - Smart-meter pulse counter & analytics agent (daemon)
 #include <atomic>
 #include <csignal>
+#include <functional>
+#include <map>
 #include <cstdio>
 #include <unistd.h>
 #include <cstdlib>
@@ -9,6 +11,7 @@
 #include <memory>
 #include <thread>
 #include "smeter/analytics.hpp"
+#include "smeter/energy_agent.hpp"
 #include "smeter/gpio_source.hpp"
 #include "smeter/http_server.hpp"
 #include "smeter/sim_source.hpp"
@@ -32,6 +35,8 @@ R"(smeterd - smart meter pulse counter & analytics agent
   --port P              HTTP port (default 8099)
   --bind ADDR           HTTP bind address (default 127.0.0.1)
   --data-dir DIR        persistence directory (default ./data)
+  --profile P           simulator load: appliances (default, smart-agent demo) | classic
+  --no-spike-demo       do not add the unusual evening AC spike to today's simulated load
   --duration S          exit after S real seconds (default: run forever)
 )";
 }
@@ -42,7 +47,8 @@ int main(int argc, char** argv) {
     std::string chip = "/dev/gpiochip0", data_dir = "./data", bind = "127.0.0.1";
     unsigned line = 17;
     double speed = 60, start_hour = 17.5, duration = 0;
-    bool overload = true;
+    bool overload = true, spike_demo = true;
+    std::string profile = "appliances";
     int port = 8099;
 
     for (int i = 1; i < argc; ++i) {
@@ -61,6 +67,8 @@ int main(int argc, char** argv) {
         else if (a == "--port") port = std::atoi(next("--port"));
         else if (a == "--bind") bind = next("--bind");
         else if (a == "--data-dir") data_dir = next("--data-dir");
+        else if (a == "--profile") profile = next("--profile");
+        else if (a == "--no-spike-demo") spike_demo = false;
         else if (a == "--duration") duration = std::atof(next("--duration"));
         else { usage(); return a == "--help" ? 0 : 2; }
     }
@@ -73,9 +81,23 @@ int main(int argc, char** argv) {
     (void)!std::system(("mkdir -p '" + data_dir + "'").c_str());
     Storage store(data_dir);
 
+    // ---- smart energy agent: tariff, appliance register, usage history ----
+    SlabTariff tariff;
+    const std::vector<Appliance> appliances = defaultAppliances();
+    UsageTracker usage;
+    std::function<double(double)> load_model;  // set only for the appliance-based simulator
     std::unique_ptr<PulseSource> src;
     if (use_gpio) src = std::make_unique<GpioCdevSource>(chip, line);
-    else src = std::make_unique<SimSource>(cfg.imp_per_kwh, speed, start_hour, overload);
+    else {
+        auto sim = std::make_unique<SimSource>(cfg.imp_per_kwh, speed, start_hour, overload);
+        if (profile == "appliances") {
+            std::vector<Boost> boosts;
+            if (spike_demo) boosts.push_back({"Air conditioner", localTime(sim->wall_start_s()).day, {19, 22}});  // hot evening today
+            load_model = ApplianceLoadModel(appliances, boosts);
+            sim->set_load_model(load_model);
+        }
+        src = std::move(sim);
+    }
 
     PulseQueue q;
     if (!src->start(q)) { std::cerr << "cannot start pulse source\n"; return 1; }
@@ -83,6 +105,13 @@ int main(int argc, char** argv) {
     Analytics an(cfg, src->wall_start_s(), src->now_ns());
     an.set_source_name(src->name());
     an.set_sink([&](const Bucket& b) { store.append_bucket(b); });
+    an.set_energy_sink([&](double wall, double wh) { usage.add(wall, wh); });
+    auto seed_usage = [&] {   // simulator: start the month with realistic history
+        if (load_model) seedHistory(usage, load_model, src->wall_start_s());
+    };
+    if (use_gpio) { std::map<long, Hours> h; if (store.load_usage(h)) usage.restore(h); }
+    else seed_usage();
+    EnergyAgent agent(tariff, appliances, usage, cfg.rate_peak, cfg.rate_offpeak);
     PersistedState ps;
     if (store.load_state(ps)) {
         an.restore(ps.pulses, ps.energy_wh, ps.cost);
@@ -93,6 +122,7 @@ int main(int argc, char** argv) {
 
     std::atomic<bool> restart_req{false}, reset_req{false};
     HttpServer http(an, static_cast<uint16_t>(port), bind);
+    http.set_agent(&agent);
     http.set_restart_handler([&] { restart_req = true; });   // whole-daemon restart (re-exec)
     http.set_reset_handler([&] { reset_req = true; });       // counters reset only
     if (!http.start()) { std::cerr << "cannot start HTTP server\n"; return 1; }
@@ -101,6 +131,7 @@ int main(int argc, char** argv) {
     auto save = [&] {
         auto s = an.snapshot();
         store.save_state({s.pulses, s.energy_kwh * 1000.0, s.cost});
+        if (use_gpio) store.save_usage(usage.snapshot());
     };
     const uint64_t t_begin = mono_ns();
     uint64_t last_save = t_begin;
@@ -115,6 +146,7 @@ int main(int argc, char** argv) {
             while (q.pop()) {}
             src->failed = false; fault_reported = false;
             if (!src->start(q)) { std::cerr << "restart: cannot start pulse source\n"; an.on_source_error(); fault_reported = true; }
+            usage.clear(); seed_usage();
             an.reset(src->wall_start_s(), src->now_ns());
             an.start();
             store.save_state({0, 0.0, 0.0});

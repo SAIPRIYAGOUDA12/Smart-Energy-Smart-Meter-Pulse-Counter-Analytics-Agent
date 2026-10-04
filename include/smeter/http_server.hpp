@@ -13,6 +13,8 @@
 #include <sstream>
 #include <thread>
 #include "smeter/analytics.hpp"
+#include <map>
+#include "smeter/agent_json.hpp"
 #include "smeter/dashboard.hpp"
 
 namespace sm {
@@ -55,11 +57,28 @@ inline std::string prometheus(const Snapshot& s) {
     return o.str();
 }
 
+inline std::string urlDecode(const std::string& s) {
+    std::string o;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '+') o += ' ';
+        else if (s[i] == '%' && i + 2 < s.size()) { o += static_cast<char>(std::strtol(s.substr(i + 1, 2).c_str(), nullptr, 16)); i += 2; }
+        else o += s[i];
+    }
+    return o;
+}
+inline std::map<std::string, std::string> parseQuery(const std::string& q) {
+    std::map<std::string, std::string> m;
+    std::istringstream is(q); std::string kv;
+    while (std::getline(is, kv, '&')) { auto e = kv.find('='); if (e != std::string::npos) m[urlDecode(kv.substr(0, e))] = urlDecode(kv.substr(e + 1)); }
+    return m;
+}
+
 class HttpServer {
 public:
     HttpServer(Analytics& a, uint16_t port, std::string bind = "127.0.0.1") : a_(a), port_(port), bind_(std::move(bind)) {}
     ~HttpServer() { stop(); }
     void set_restart_handler(std::function<void()> f) { on_restart_ = std::move(f); }
+    void set_agent(const EnergyAgent* ag) { agent_ = ag; }
     void set_reset_handler(std::function<void()> f) { on_reset_ = std::move(f); }
 
     bool start() {
@@ -89,6 +108,31 @@ public:
     /// Route a request path to (status, content-type, body). Public for testing.
     std::string route(const std::string& path, int& status, std::string& ctype) const {
         status = 200; ctype = "application/json";
+        // ---- Smart Energy Agent API (needs set_agent) ----
+        if (agent_ && path.rfind("/api/", 0) == 0) {
+            const auto qp = path.find('?');
+            const std::string base = path.substr(0, qp);
+            const auto q = parseQuery(qp == std::string::npos ? "" : path.substr(qp + 1));
+            auto num_or = [&](const char* k, double d) { auto it = q.find(k); return it == q.end() || it->second.empty() ? d : std::atof(it->second.c_str()); };
+            if (base == "/api/agent") { auto s = a_.snapshot(); return agentJson(agent_->report(s.wall_s, s.power_w), agent_->tariff()); }
+            if (base == "/api/appliances") { return rankingJson(rankAppliancesByConsumption(agent_->appliances(), agent_->tariff())); }
+            if (base == "/api/tariff") return tariffJson(agent_->tariff());
+            if (base == "/api/whatif") {
+                auto it = q.find("appliance");
+                auto s = a_.snapshot();
+                const Appliance* ap = it == q.end() ? nullptr : findAppliance(agent_->appliances(), it->second);
+                if (!ap) { status = 400; return "{\"error\":\"unknown appliance\"}"; }
+                return whatIfJson(agent_->whatIf(ap->name, num_or("hours", ap->hours_per_day), s.wall_s), agent_->tariff().currency);
+            }
+            if (base == "/api/bill") {
+                BillCalcInput in;
+                in.units = num_or("units", 0); in.days = num_or("days", 1); in.prev_units = num_or("prev", -1);
+                in.avg_daily = num_or("avg", -1); in.month_days = num_or("month_days", 30);
+                auto r = smartBillCalculator(agent_->tariff(), in);
+                if (!r.valid) status = 400;
+                return billCalcJson(r, agent_->tariff());
+            }
+        }
         if (path == "/" || path == "/index.html") { ctype = "text/html; charset=utf-8"; return dashboard_html(); }
         if (path == "/api/status") return json_status(a_.snapshot());
         if (path.rfind("/api/history", 0) == 0) {
@@ -138,6 +182,7 @@ private:
         }
     }
     Analytics& a_;
+    const EnergyAgent* agent_ = nullptr;
     std::function<void()> on_restart_, on_reset_;
     uint16_t port_;
     std::string bind_;

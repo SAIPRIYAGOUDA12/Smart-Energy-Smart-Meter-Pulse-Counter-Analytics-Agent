@@ -7,7 +7,9 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <map>
 #include "smeter/analytics.hpp"
+#include "smeter/calendar.hpp"
 
 namespace sm {
 
@@ -44,6 +46,27 @@ public:
             else if (k == "cost") s.cost = std::stod(v);
         }
         return true;
+    }
+
+    /// Hourly usage history (day, 24 x kWh) - lets the agent keep its month/week data across restarts.
+    bool save_usage(const std::map<long, Hours>& m) const {
+        const std::string tmp = dir_ + "/usage_hourly.csv.tmp", fin = dir_ + "/usage_hourly.csv";
+        { std::ofstream f(tmp);
+          if (!f) return false;
+          f.precision(6);
+          for (auto& [day, h] : m) { f << day; for (double v : h) f << ',' << v; f << '\n'; } }
+        return std::rename(tmp.c_str(), fin.c_str()) == 0;
+    }
+    bool load_usage(std::map<long, Hours>& m) const {
+        std::ifstream f(dir_ + "/usage_hourly.csv");
+        if (!f) return false;
+        std::string line;
+        while (std::getline(f, line)) {
+            std::istringstream is(line); std::string tok; Hours h{}; long day = 0; int i = -1;
+            while (std::getline(is, tok, ',')) { if (i < 0) day = std::stol(tok); else if (i < 24) h[i] = std::stod(tok); ++i; }
+            if (i == 24) m[day] = h;
+        }
+        return !m.empty();
     }
 
     void append_bucket(const Bucket& b) const {

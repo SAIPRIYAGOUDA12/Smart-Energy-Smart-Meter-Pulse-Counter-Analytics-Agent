@@ -15,3 +15,9 @@ sudo ./build/smeterd --gpio /dev/gpiochip<N> 0 --imp 1000 &
 sudo ./build/pulse-injector --pull <printed path> --watts 3600 --count 30   # 1 pulse/s
 ./build/smeter-cli --once                         # ~3600 W, 30 pulses
 ```
+
+## Smart Energy Agent tests (`make test` runs both binaries)
+`tests/test_agent.cpp` - 15 tests: telescopic billing, slab lookup, energy formulas, projection, daily target, green/yellow/red zones,
+92-unit calculator example, appliance ranking, what-if with tariff re-pricing, tracker totals/baseline/peak, spike detection,
+recommendations (214-unit example, never trims the fridge), load model + seeding + full agent report, usage persistence, energy hook, REST endpoints.
+`scripts/system_test.sh` also exercises `/api/agent`, `/api/appliances`, `/api/whatif`, `/api/bill` and the dashboard page.

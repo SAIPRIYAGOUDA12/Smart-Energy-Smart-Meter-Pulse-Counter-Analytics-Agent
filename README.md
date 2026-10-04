@@ -71,6 +71,7 @@ Options: `./build/smeterd --help`.
 | `/api/history?n=60` | per-minute avg/peak watts and Wh |
 | `/metrics` | Prometheus exposition |
 | `/healthz` | liveness |
+| `/api/agent` `/api/appliances` `/api/whatif` `/api/bill` `/api/tariff` | Smart Energy Agent API (see docs/SMART_AGENT.md) |
 | `POST /api/restart` | restart the whole `smeterd` process (clean shutdown, save totals, re-exec, same PID); needs header `X-Smeter: 1`; dashboard **Restart daemon** button |
 | `POST /api/reset` | zero counters/history and restart the simulation; dashboard **Reset counters** button |
 
@@ -78,12 +79,23 @@ Data in `./data`: `smeter.state` (crash-safe counter) and `energy_minutes.csv`.
 
 ## Testing
 ```bash
-make test          # 14 unit + integration tests (ASan/UBSan)
+make test          # 30 unit + integration tests (15 core + 15 smart-agent), ASan/UBSan
 make tsan          # ThreadSanitizer
 make system-test   # daemon + API + CLI + restart persistence
 ```
 Hardware-in-the-loop with the kernel `gpio-sim` module: see [docs/TESTING.md](docs/TESTING.md).
 Measured: simulator energy matches ground truth within 1 Wh with zero dropped pulses.
+
+## Smart Energy Agent (v2.0)
+Beyond metering, the daemon now acts as an energy advisor: slab-tariff bill, month-end projection, tariff-zone warnings (green/yellow/red),
+spike and trend detection, an appliance register with per-appliance cost, a **"What if I save?"** calculator, a **Smart Bill Calculator**,
+and data-driven recommendations. Open **http://127.0.0.1:8099/** and use the tabs: *Live Meter - Smart Agent - What if I save? - Bill Calculator*.
+```bash
+./build/smeterd --sim --start-hour 21.3 --speed 60     # jump to the evening to see the unusual-spike warning
+curl "localhost:8099/api/bill?units=92&days=27"        # bill calculator
+curl "localhost:8099/api/whatif?appliance=air&hours=1.5"
+```
+Full guide, function map and viva Q&A: [docs/SMART_AGENT.md](docs/SMART_AGENT.md). Demo tariff and appliances are editable (`SlabTariff`, `defaultAppliances()`).
 
 ## Documentation
 [PRD & timeline](docs/PRD.md) · [Architecture & UML](docs/ARCHITECTURE.md) · [Testing](docs/TESTING.md) · [Progress log](docs/PROGRESS.md)

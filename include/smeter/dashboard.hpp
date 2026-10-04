@@ -30,12 +30,32 @@ ul{list-style:none;margin:0;padding:0;max-height:210px;overflow:auto}li{padding:
 li.a{border-color:var(--warn)}li.o{border-color:var(--bad)}li.g{border-color:var(--ok)}
 #err{display:none;background:var(--bad);color:#fff;padding:8px 20px;font-weight:600}
 @media(max-width:900px){main{grid-template-columns:1fr 1fr}.wide,.half{grid-column:span 2}}
+nav{display:flex;flex-wrap:wrap;gap:4px;padding:8px 20px 0;border-bottom:1px solid var(--line)}
+nav button{border:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;background:none;padding:9px 14px;font-weight:600;color:var(--mut)}
+nav button.on{color:var(--fg);border-bottom-color:var(--acc)}
+main[hidden]{display:none}
+.zone{display:inline-block;padding:3px 10px;border-radius:99px;font-weight:700;font-size:12px;background:var(--line)}
+.SAFE{background:var(--ok);color:#06281a}.APPROACHING{background:var(--warn);color:#241700}.HIGH{background:var(--bad);color:#fff}
+#slabbar{position:relative;padding:22px 0 24px}.slabbar{display:flex;height:28px;border-radius:8px;overflow:hidden}
+.seg{display:flex;align-items:center;justify-content:center;font-size:11px;color:#10131c;font-weight:600;white-space:nowrap;overflow:hidden}
+.mark{position:absolute;top:8px;height:56px;width:2px;background:var(--fg)}.mark span{position:absolute;left:4px;font-size:11px;white-space:nowrap;top:-4px}.mark.p span{top:auto;bottom:-4px}
+.rec{border-left:4px solid var(--acc);background:var(--bg);padding:10px 12px;border-radius:6px;margin-bottom:8px;line-height:1.45}
+.rec b{display:block;margin-bottom:3px}.rec small{color:var(--ok);font-weight:600}.rec.slab,.rec.spike{border-color:var(--bad)}.rec.approach,.rec.action{border-color:var(--warn)}
+.abar{margin:9px 0}.abar .t{display:flex;justify-content:space-between;font-size:12px;gap:8px}.abar .b{height:8px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:3px}.abar .b i{display:block;height:100%;background:var(--acc)}
+input,select{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%}input[type=range]{padding:0}
+label{font-size:12px;color:var(--mut);display:block;margin:11px 0 4px}
+table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line);font-size:13px}td:first-child,th:first-child{text-align:left}th{color:var(--mut);font-weight:600}
+.alert{padding:10px 14px;border-radius:8px;background:var(--warn);color:#241700;font-weight:600}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.grid4 .card{padding:10px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}.row span:first-child{color:var(--mut)}
+@media(max-width:900px){.grid4{grid-template-columns:1fr 1fr}}
 </style></head><body>
 <div id="dlg" style="display:none;position:fixed;inset:0;background:#0009;align-items:center;justify-content:center;z-index:9"><div class="card" style="max-width:380px;margin:16px"><div id="dmsg" style="white-space:pre-line;margin-bottom:14px"></div><div style="text-align:right"><button id="dno">Cancel</button> <button id="dyes" class="on">OK</button></div></div></div>
 <div id="err">Cannot reach smeterd - retrying...</div>
 <header><h1>&#9889; Smart Meter Agent</h1><span id="src" class="sub"></span><span id="clock" class="sub"></span>
 <span id="state" class="badge INIT">INIT</span><button id="pause">&#10074;&#10074; Pause</button><button id="reset">&#10226; Reset counters</button><button id="restart" style="border-color:var(--bad);color:var(--bad)">&#8635; Restart daemon</button></header>
-<main>
+<nav id="tabs"><button data-t="over" class="on">📊 Live Meter</button><button data-t="agent">🧠 Smart Agent</button><button data-t="whatif">💡 What if I save?</button><button data-t="bill">🧮 Bill Calculator</button></nav>
+<main id="t-over">
 <div class="card"><h3>Power now</h3><div class="big" id="pw">-</div><div class="sub" id="sm"></div><div class="bar"><i id="bar"></i></div><div class="sub" id="lim"></div></div>
 <div class="card"><h3>Energy</h3><div class="big" id="en">-</div><div class="sub" id="pl"></div></div>
 <div class="card"><h3>Cost</h3><div class="big" id="co">-</div><div class="sub" id="ra"></div></div>
@@ -48,6 +68,50 @@ li.a{border-color:var(--warn)}li.o{border-color:var(--bad)}li.g{border-color:var
 <div class="card half"><h3>Event log</h3><ul id="ev"></ul></div>
 <div class="card half"><h3>Counters</h3><div id="cnt" class="sub" style="line-height:1.9"></div></div>
 </main>
+<main id="t-agent" hidden>
+<div class="card wide" id="a-alert" style="display:none"></div>
+<div class="card"><h3>Units this month</h3><div class="big" id="a-units">-</div><div class="sub" id="a-days"></div></div>
+<div class="card"><h3>Current estimated bill</h3><div class="big" id="a-bill">-</div><div class="sub" id="a-bill2"></div></div>
+<div class="card"><h3>Current slab</h3><div class="big" id="a-slab">-</div><div class="sub" id="a-rate"></div></div>
+<div class="card"><h3>Units to next slab</h3><div class="big" id="a-next">-</div><div class="sub"><span id="a-zone" class="zone">-</span></div></div>
+<div class="card wide"><h3>Slab position: now vs projected month-end</h3><div id="slabbar"></div><div id="a-msg"></div></div>
+<div class="card"><h3>Projected month units</h3><div class="big" id="p-units">-</div><div class="sub" id="p-sub"></div></div>
+<div class="card"><h3>Projected monthly bill</h3><div class="big" id="p-bill">-</div><div class="sub" id="p-bill2"></div></div>
+<div class="card"><h3>Expected slab</h3><div class="big" id="p-slab">-</div><div class="sub" id="p-slab2"></div></div>
+<div class="card"><h3>Peak consumption period</h3><div class="big" id="p-peak" style="font-size:22px">-</div><div class="sub" id="p-peak2"></div></div>
+<div class="card"><h3>Potential units saved</h3><div class="big" id="s-units">-</div><div class="sub">trim top-3 appliances 20% for the rest of the month</div></div>
+<div class="card"><h3>Potential money saved</h3><div class="big" id="s-money">-</div><div class="sub" id="s-money2"></div></div>
+<div class="card"><h3>Units to cut to avoid slab</h3><div class="big" id="s-need">-</div><div class="sub" id="s-need2"></div></div>
+<div class="card"><h3>Daily saving target</h3><div class="big" id="s-daily">-</div><div class="sub" id="s-daily2"></div></div>
+<div class="card"><h3>Top consuming appliance</h3><div class="big" id="i-top" style="font-size:20px">-</div><div class="sub" id="i-top2"></div></div>
+<div class="card"><h3>Current warning</h3><div id="i-warn" style="line-height:1.45">-</div></div>
+<div class="card half"><h3>Top 3 personalised recommendations</h3><div id="i-recs"></div></div>
+<div class="card"><h3>Today so far</h3><div class="big" id="t-today">-</div><div class="sub" id="t-today2"></div></div>
+<div class="card"><h3>Yesterday</h3><div class="big" id="t-yday">-</div><div class="sub" id="t-yday2"></div></div>
+<div class="card"><h3>7-day average</h3><div class="big" id="t-avg7">-</div><div class="sub" id="t-avg72"></div></div>
+<div class="card"><h3>Consumption trend</h3><div class="big" id="t-trend" style="font-size:22px">-</div><div class="sub" id="t-trend2"></div></div>
+<div class="card half"><div class="tools"><h3 id="ac-title">Daily consumption</h3>
+ <span id="ac-mode"><button data-m="daily" class="on">Daily</button><button data-m="hourly">Hourly</button><button data-m="weekly">Weekly</button></span></div><canvas id="c3"></canvas></div>
+<div class="card half"><h3>Appliance consumption breakdown (estimated per month)</h3><div id="a-brk"></div></div>
+</main>
+<main id="t-whatif" hidden>
+<div class="card half"><h3>What if I save?</h3>
+ <label>Appliance</label><select id="w-app"></select>
+ <label id="w-lab">Proposed usage</label><input type="range" id="w-h" min="0" max="24" step="0.25">
+ <div class="sub" id="w-cur" style="margin-top:8px"></div></div>
+<div class="card half"><h3>Result</h3><div id="w-sum" class="big" style="font-size:18px;line-height:1.4">-</div><div class="grid4" id="w-nums"></div></div>
+<div class="card wide"><h3>Appliance register (watts x hours x days, priced with the slab tariff)</h3><div style="overflow-x:auto"><table id="w-tab"></table></div></div>
+</main>
+<main id="t-bill" hidden>
+<div class="card half"><h3>Smart bill calculator</h3>
+ <label>Current consumed units *</label><input id="b-units" type="number" min="0" step="0.1" value="92">
+ <label>Days elapsed in the billing period *</label><input id="b-days" type="number" min="1" step="1" value="27">
+ <label>Days in the full month</label><input id="b-md" type="number" min="1" step="1" value="30">
+ <label>Previous month's units (optional)</label><input id="b-prev" type="number" min="0" step="0.1" placeholder="e.g. 105">
+ <label>Average daily consumption, units/day (optional)</label><input id="b-avg" type="number" min="0" step="0.1" placeholder="e.g. 3.4">
+ <button class="on" id="b-go" style="margin-top:14px;width:100%">Calculate</button></div>
+<div class="card half" id="b-out"><h3>Result</h3><div class="sub">Enter your readings and press Calculate.</div></div>
+</main>
 <script>
 const $=i=>document.getElementById(i),cs=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 class Chart{
@@ -59,8 +123,8 @@ class Chart{
  draw(){const cv=this.cv,r=cv.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;
   const c=cv.getContext('2d');c.setTransform(d,0,0,d,0,0);const W=r.width,H=r.height,L=46,R=10,T=10,B=22,n=this.ys.length;
   c.font='11px system-ui';c.fillStyle=cs('--mut');c.strokeStyle=cs('--line');
-  let mx=Math.max(1,...this.ys,this.limit||0)*1.1;
-  for(let i=0;i<=4;i++){const y=T+(H-T-B)*i/4;c.beginPath();c.moveTo(L,y);c.lineTo(W-R,y);c.stroke();c.fillText(Math.round(mx*(1-i/4)),4,y+4);}
+  let mx=Math.max(this.minmax||1,...this.ys,...(this.ys2||[]),this.limit||0)*1.1;
+  for(let i=0;i<=4;i++){const y=T+(H-T-B)*i/4;c.beginPath();c.moveTo(L,y);c.lineTo(W-R,y);c.stroke();c.fillText((mx*(1-i/4)).toFixed(mx<10?1:0),4,y+4);}
   if(!n){c.fillText('waiting for data...',L+10,H/2);return;}
   const X=i=>L+(n>1?i/(n-1):.5)*(W-L-R),Y=v=>T+(H-T-B)*(1-v/mx),acc=cs('--acc');
   if(this.limit){c.strokeStyle=cs('--bad');c.setLineDash([6,4]);c.beginPath();c.moveTo(L,Y(this.limit));c.lineTo(W-R,Y(this.limit));c.stroke();c.setLineDash([]);c.fillStyle=cs('--bad');c.fillText('overload limit',L+4,Y(this.limit)-4);}
@@ -68,10 +132,11 @@ class Chart{
   if(this.bars){const bw=Math.max(1,(W-L-R)/n-1);this.ys.forEach((v,i)=>c.fillRect(X(i)-bw/2,Y(v),bw,H-B-Y(v)));}
   else{c.lineWidth=2;c.beginPath();this.ys.forEach((v,i)=>i?c.lineTo(X(i),Y(v)):c.moveTo(X(i),Y(v)));c.stroke();c.lineWidth=1;
    const g=c.createLinearGradient(0,T,0,H-B);g.addColorStop(0,acc+'55');g.addColorStop(1,acc+'00');c.lineTo(X(n-1),H-B);c.lineTo(X(0),H-B);c.fillStyle=g;c.fill();}
+  if(this.ys2&&this.ys2.length){c.strokeStyle=cs('--warn');c.lineWidth=2;c.setLineDash([5,4]);c.beginPath();this.ys2.forEach((v,i)=>i?c.lineTo(X(i),Y(v)):c.moveTo(X(i),Y(v)));c.stroke();c.setLineDash([]);c.lineWidth=1;}
   c.fillStyle=cs('--mut');c.fillText(this.xs[0]||'',L,H-6);const l=this.xs[n-1]||'';c.fillText(l,W-R-c.measureText(l).width,H-6);
   if(this.hi!=null){const i=this.hi,x=X(i),y=Y(this.ys[i]);c.strokeStyle=cs('--fg');c.beginPath();c.moveTo(x,T);c.lineTo(x,H-B);c.stroke();
    c.fillStyle=acc;c.beginPath();c.arc(x,y,4,0,7);c.fill();
-   const t=this.ys[i].toFixed(1)+' '+this.unit+'  '+(this.xs[i]||''),w=c.measureText(t).width+14,bx=Math.min(Math.max(x-w/2,L),W-R-w);
+   const t=this.ys[i].toFixed(this.dec==null?1:this.dec)+' '+this.unit+(this.ys2?' (typical '+this.ys2[i].toFixed(2)+')':'')+'  '+(this.xs[i]||''),w=c.measureText(t).width+14,bx=Math.min(Math.max(x-w/2,L),W-R-w);
    c.fillStyle=cs('--card');c.strokeStyle=cs('--line');c.fillRect(bx,T+2,w,22);c.strokeRect(bx,T+2,w,22);c.fillStyle=cs('--fg');c.fillText(t,bx+7,T+17);}}
 }
 const live=new Chart($('c1'),'W'),hist=new Chart($('c2'),'W');hist.bars=true;
@@ -114,6 +179,104 @@ document.querySelectorAll('#metric button').forEach(b=>b.onclick=()=>{metric=b.d
 document.querySelectorAll('#range button').forEach(b=>b.onclick=()=>{range=+b.dataset.n;document.querySelectorAll('#range button').forEach(x=>x.classList.toggle('on',x===b));poll();});
 $('csv').onclick=()=>{if(!lastHist)return;let t='time,avg_w,peak_w,energy_wh\n';lastHist.t.forEach((x,i)=>t+=hhmm(x)+','+lastHist.avg_w[i]+','+lastHist.peak_w[i]+','+lastHist.energy_wh[i]+'\n');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download='smeter_history.csv';a.click();};
+/* ===================== Smart Energy Agent tabs ===================== */
+let tab='over',AG=null,acMode='daily',APPS=[],CUR='\u20B9',wTimer=null;
+const f=(v,d=0)=>Number(v).toFixed(d),fa=v=>Math.abs(v-Math.round(v))<0.05?f(v,0):f(v,1);
+const ach=new Chart($('c3'),'kWh');ach.bars=true;ach.dec=2;
+const SEGC=['#3ddc97','#ffb020','#ff7a45','#ff5d5d'],ZN={SAFE:'\uD83D\uDFE2 Safe zone',APPROACHING:'\uD83D\uDFE1 Approaching slab',HIGH:'\uD83D\uDD34 High consumption'};
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;
+ document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+ ['over','agent','whatif','bill'].forEach(t=>$('t-'+t).hidden=(t!==tab));
+ if(tab==='agent')loadAgent();if(tab==='whatif')initWhatIf();if(tab==='bill'&&!$('b-out').dataset.done)runBill();
+ setTimeout(()=>{live.draw();hist.draw();ach.draw();},60);});
+
+async function loadAgent(){
+ let d;try{d=await (await fetch('/api/agent')).json();}catch(e){return;}
+ AG=d;CUR=d.cur;const c=d.cur,s=d.status,p=d.prediction,k=d.consumption,v=d.savings,i=d.intelligence,cal=d.calendar;
+ $('a-units').textContent=f(s.units,1)+' units';$('a-days').textContent='day '+cal.day+' of '+cal.dim+' \u2022 '+f(k.avg_daily,1)+' units/day avg';
+ $('a-bill').textContent=c+f(s.bill);$('a-bill2').textContent='energy '+c+f(s.energy_charge)+' + fixed '+c+f(s.fixed);
+ $('a-slab').textContent=s.slab_label;$('a-rate').textContent=c+f(s.rate,2)+' per unit';
+ $('a-next').textContent=s.to_next<0?'top slab':fa(s.to_next)+' units';
+ const z=$('a-zone');z.textContent=ZN[s.zone];z.className='zone '+s.zone;
+ const al=$('a-alert');if(k.spike_msg){const sp=k.spike;al.className='card wide alert';al.style.display='block';
+  al.textContent='\u26A0 '+k.spike_msg+(sp?' '+f(sp.actual,1)+' kWh used vs ~'+f(sp.expected,1)+' kWh typical for those hours.':'');}else al.style.display='none';
+ // slab position bar
+ const sl=d.tariff.slabs,fin=sl.filter(x=>x.upto!=null),max=Math.ceil(fin[fin.length-1].upto*1.35/50)*50;let lo=0,h='<div class="slabbar">';
+ sl.forEach((x,j)=>{const hi=x.upto==null?max:Math.min(x.upto,max);h+='<div class="seg" style="width:'+((hi-lo)/max*100)+'%;background:'+SEGC[j%4]+'">'+x.label+' \u2022 '+c+f(x.rate,2)+'</div>';lo=hi;});
+ const pos=u=>Math.min(99.5,u/max*100);
+ h+='</div><div class="mark" style="left:'+pos(s.units)+'%"><span>now '+f(s.units,0)+'</span></div><div class="mark p" style="left:'+pos(p.units)+'%"><span>projected '+f(p.units,0)+'</span></div>';
+ $('slabbar').innerHTML=h;$('a-msg').innerHTML='<b>'+s.message+'</b>';
+ // prediction
+ $('p-units').textContent=f(p.units,0)+' units';$('p-sub').textContent=f(cal.remaining,1)+' days left in the month';
+ $('p-bill').textContent=c+f(p.bill);$('p-bill2').textContent=(p.bill>s.bill?'+':'')+c+f(p.bill-s.bill)+' more than the bill so far';
+ $('p-slab').textContent=p.slab_label;$('p-slab2').textContent=p.to_next<0?'highest slab':fa(p.to_next)+' units below the next slab';
+ $('p-peak').textContent=k.peak?k.peak.label:'learning...';$('p-peak2').textContent=k.peak?f(k.peak.share,0)+'% of daily usage ('+f(k.peak.kwh,1)+' kWh)':'';
+ // savings
+ $('s-units').textContent=f(v.potential_units,1)+' units';$('s-money').textContent=c+f(v.potential_money);$('s-money2').textContent='at your projected slab rates';
+ $('s-need').textContent=v.needed_units>0?f(v.needed_units,1)+' units':'none';$('s-need2').textContent=v.needed_units>0?'to fall back below the '+f(s.threshold,0)+'-unit boundary':'no slab crossing projected';
+ $('s-daily').textContent=v.daily_target>0?f(v.daily_target,2)+' units/day':(v.daily_allowance>0?'\u2264 '+f(v.daily_allowance,1)+' units/day':'on track');
+ $('s-daily2').textContent=v.daily_target>0?'reduction to stay below the next slab':(v.daily_allowance>0?'daily allowance to stay in your slab':'no reduction needed');
+ // intelligence
+ $('i-top').textContent=i.top_appliance||'-';$('i-top2').textContent=f(i.top_kwh,0)+' units/month \u2022 '+f(i.top_share,0)+'% of estimated usage';
+ const zc={SAFE:'var(--ok)',APPROACHING:'var(--warn)',HIGH:'var(--bad)'}[s.zone];
+ $('i-warn').innerHTML='<span class="zone '+s.zone+'">'+ZN[s.zone]+'</span><div style="margin-top:8px">'+i.warning+'</div>';
+ $('i-recs').innerHTML=i.recommendations.slice(0,3).map(r=>'<div class="rec '+r.id+'"><b>'+r.title+'</b>'+r.detail+((r.units>0||r.money>0)?'<br><small>\u2248 '+f(r.units,1)+' units \u2022 '+c+f(r.money)+' saving</small>':'')+'</div>').join('');
+ // trend
+ const arrow=x=>(x>=0?'\u25B2 ':'\u25BC ')+f(Math.abs(x),0)+'%';
+ $('t-today').textContent=f(k.today,2)+' kWh';$('t-today2').textContent=d.ready?arrow(k.pct_vs_usual)+' vs usual for this time of day':'';
+ $('t-yday').textContent=f(k.yesterday,2)+' kWh';$('t-yday2').textContent=arrow(k.pct_vs_yesterday)+' today vs yesterday (same time)';
+ $('t-avg7').textContent=f(k.avg7,2)+' kWh/day';$('t-avg72').textContent='last 7 days total '+f(k.last7,1)+' kWh';
+ $('t-trend').textContent={increasing:'\u2197 Increasing',decreasing:'\u2198 Decreasing',stable:'\u2192 Stable'}[k.trend];$('t-trend2').textContent=f(k.trend_pct,1)+'% (last 3 days vs previous 4)';
+ // analytics
+ drawAc();const a=d.analytics,mx=Math.max.apply(null,a.appliances.map(x=>x.kwh));
+ $('a-brk').innerHTML=a.appliances.map(x=>'<div class="abar"><div class="t"><span>'+x.name+'</span><span>'+f(x.kwh,1)+' units \u2022 '+c+f(x.cost)+' \u2022 '+f(x.share,0)+'%</span></div><div class="b"><i style="width:'+(x.kwh/mx*100)+'%"></i></div></div>').join('')
+  +'<div class="sub">Modelled total '+f(i.modeled_month,0)+' units/month vs projected '+f(p.units,0)+'.</div>';
+}
+function drawAc(){if(!AG)return;const a=AG.analytics;
+ if(acMode==='daily'){ach.ys2=null;$('ac-title').textContent='Daily consumption, last 14 days (kWh)';
+  ach.set(a.daily,a.daily.map((_,j)=>new Date((AG.now-(a.daily.length-1-j)*86400)*1000).toLocaleDateString(undefined,{day:'numeric',month:'short'})));}
+ else if(acMode==='hourly'){ach.ys2=a.hourly_typical;$('ac-title').textContent='Today by hour vs your typical hour (dashed)';ach.set(a.hourly_today,a.hourly_today.map((_,j)=>j+':00'));}
+ else{ach.ys2=null;$('ac-title').textContent='Weekly consumption, last 4 weeks (kWh)';ach.set(a.weekly,['3 weeks ago','2 weeks ago','last week','last 7 days']);}}
+document.querySelectorAll('#ac-mode button').forEach(b=>b.onclick=()=>{acMode=b.dataset.m;document.querySelectorAll('#ac-mode button').forEach(x=>x.classList.toggle('on',x===b));drawAc();});
+
+/* ---------- What if I save? ---------- */
+async function initWhatIf(){
+ if(APPS.length)return;
+ try{APPS=await (await fetch('/api/appliances')).json();}catch(e){return;}
+ $('w-app').innerHTML=APPS.map((x,j)=>'<option value="'+j+'">'+x.name+'</option>').join('');
+ $('w-tab').innerHTML='<tr><th>Appliance</th><th>Watts</th><th>Hours/day</th><th>Days/month</th><th>kWh/month</th><th>Cost/month</th><th>Share</th></tr>'
+  +APPS.map(x=>'<tr><td>'+x.name+'</td><td>'+x.watts+'</td><td>'+fa(x.hours)+'</td><td>'+x.days+'</td><td>'+f(x.kwh,1)+'</td><td>'+CUR+f(x.cost)+'</td><td>'+f(x.share,0)+'%</td></tr>').join('');
+ $('w-app').onchange=wSelect;$('w-h').oninput=()=>{wLabel();clearTimeout(wTimer);wTimer=setTimeout(runWhatIf,120);};wSelect();}
+const wApp=()=>APPS[+$('w-app').value];
+function wLabel(){const a=wApp();$('w-lab').textContent='Proposed usage: '+fa(+$('w-h').value)+' hours/day  (currently '+fa(a.hours)+')';
+ $('w-cur').textContent=a.name+': '+a.watts+' W \u2022 '+fa(a.hours)+' h/day \u2022 '+a.days+' days/month = '+f(a.kwh,1)+' units/month';}
+function wSelect(){const a=wApp();$('w-h').value=a.hours;wLabel();runWhatIf();}
+async function runWhatIf(){const a=wApp();if(!a)return;
+ const r=await (await fetch('/api/whatif?appliance='+encodeURIComponent(a.name)+'&hours='+$('w-h').value)).json();if(r.error)return;
+ $('w-sum').textContent=r.summary;
+ $('w-nums').innerHTML=[['Current monthly',f(r.current_kwh,1)+' units'],['New monthly',f(r.new_kwh,1)+' units'],['Units saved',f(r.units_saved,1)],['Money saved',r.cur+f(r.money_saved)],
+  ['Reduction (this appliance)',f(r.pct_reduction,0)+'%'],['Share of total usage',f(r.pct_of_total,1)+'%'],['Bill before',r.cur+f(r.bill_before)],['Bill after',r.cur+f(r.bill_after)]]
+  .map(x=>'<div class="card"><h3>'+x[0]+'</h3><div class="big" style="font-size:20px">'+x[1]+'</div></div>').join('');}
+
+/* ---------- Smart bill calculator ---------- */
+async function runBill(){
+ const q=new URLSearchParams({units:$('b-units').value||0,days:$('b-days').value||1,month_days:$('b-md').value||30});
+ if($('b-prev').value)q.set('prev',$('b-prev').value);if($('b-avg').value)q.set('avg',$('b-avg').value);
+ const o=$('b-out');let r;try{r=await (await fetch('/api/bill?'+q)).json();}catch(e){o.innerHTML='<div class="alert">Cannot reach smeterd.</div>';return;}
+ o.dataset.done=1;if(r.error){o.innerHTML='<h3>Result</h3><div class="alert">'+r.error+'</div>';return;}
+ const c=r.cur,row=(a,b)=>'<div class="row"><span>'+a+'</span><b>'+b+'</b></div>';
+ o.innerHTML='<h3>Result</h3><span class="zone '+r.zone+'">'+ZN[r.zone]+'</span>'
+  +'<div style="margin:10px 0;line-height:1.45"><b>'+r.warning+'</b></div>'
+  +row('Total units consumed',f(r.units,1))+row('Estimated electricity charge (so far)',c+f(r.charge)+' <small>('+c+f(r.energy_charge)+' energy + '+c+f(r.fixed)+' fixed)</small>')
+  +row('Average units/day',f(r.avg_per_day,2))+row('Estimated units for the complete month',f(r.projected_units,1))
+  +row('Estimated monthly bill',c+f(r.projected_bill))+row('Current slab \u2192 projected slab',r.slab+' \u2192 '+r.proj_slab)
+  +row('Units remaining before next slab',r.to_next<0?'top slab':fa(r.to_next)+' units')
+  +row('Potential savings',f(r.potential_units,1)+' units \u2248 '+c+f(r.potential_money))
+  +(r.has_prev?row('vs previous month',(r.prev_change_pct>=0?'\u25B2 ':'\u25BC ')+f(Math.abs(r.prev_change_pct),1)+'%'):'')
+  +'<div class="rec" style="margin-top:12px"><b>Recommended action</b>'+r.action+'</div>'
+  +'<table style="margin-top:8px"><tr><th>Slab</th><th>Units</th><th>Rate</th><th>Amount</th></tr>'+r.lines.map(l=>'<tr><td>'+l.slab+'</td><td>'+f(l.units,1)+'</td><td>'+c+f(l.rate,2)+'</td><td>'+c+f(l.amount)+'</td></tr>').join('')+'</table>';}
+$('b-go').onclick=runBill;['b-units','b-days','b-md','b-prev','b-avg'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')runBill();}));
+setInterval(()=>{if(tab==='agent'&&!paused)loadAgent();},2000);
 poll();setInterval(()=>{if(!paused)poll();},1000);
 </script></body></html>)HTML";
 }

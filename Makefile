@@ -18,8 +18,12 @@ $(BIN)/tests: tests/test_main.cpp $(HDRS) | $(BIN)
 $(BIN):
 	mkdir -p $(BIN)
 
-test: $(BIN)/tests
+$(BIN)/tests_agent: tests/test_agent.cpp $(HDRS) | $(BIN)
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined -g $< -o $@
+
+test: $(BIN)/tests $(BIN)/tests_agent
 	$(BIN)/tests
+	$(BIN)/tests_agent
 system-test: all
 	bash scripts/system_test.sh
 tsan: tests/test_main.cpp $(HDRS) | $(BIN)

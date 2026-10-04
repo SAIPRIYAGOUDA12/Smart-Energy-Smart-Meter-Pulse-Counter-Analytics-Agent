@@ -10,6 +10,14 @@ curl -sf localhost:$PORT/healthz | grep -q ok
 curl -sf localhost:$PORT/api/status | tee "$D/s1.json" | grep -q '"state":"MEASURING\|"state":"OVERLOAD'
 curl -sf localhost:$PORT/metrics | grep -q smeter_energy_kwh_total
 ./build/smeter-cli --port $PORT --once
+# --- Smart Energy Agent API (save to files first: grep -q on a pipe would close curl early)
+get() { curl -sf "$1" -o "$D/out.txt"; }
+get localhost:$PORT/api/agent;                                   grep -q '"recommendations"' "$D/out.txt"
+get localhost:$PORT/api/appliances;                              grep -q 'Air conditioner' "$D/out.txt"
+get "localhost:$PORT/api/whatif?appliance=Air%20conditioner&hours=1"; grep -q '"units_saved"' "$D/out.txt"
+get "localhost:$PORT/api/bill?units=92&days=27";                 grep -q '"to_next":8.0' "$D/out.txt"
+get localhost:$PORT/;                                            grep -q 'id="t-agent"' "$D/out.txt"
+echo "agent API OK"
 # --- whole-daemon restart: same PID, API comes back, totals restored
 P1=$(curl -sf localhost:$PORT/api/status | grep -o '"pulses":[0-9]*' | cut -d: -f2)
 test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:$PORT/api/restart)" = 403

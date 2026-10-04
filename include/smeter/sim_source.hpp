@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
+#include <functional>
 #include <thread>
 #include "smeter/pulse_source.hpp"
 
@@ -17,6 +18,7 @@ public:
 
     bool start(PulseQueue& q) override {
         t0_real_ = mono_ns();
+        wall0_ = wall_start_s();
         truth_wh_ = 0;
         run_ = true;
         th_ = std::thread([this, &q] { loop(q); });
@@ -43,7 +45,11 @@ public:
     double truth_wh() const { return truth_wh_.load(); }
 
     /// Load profile in watts at virtual time `t` seconds since start.
+    /// Optional: replace the built-in profile by a model of wall-clock time (e.g. the appliance model).
+    void set_load_model(std::function<double(double)> m) { model_ = std::move(m); }
+
     double load_w(double t) const {
+        if (model_) return model_(wall0_ + t);
         double w = 250.0 + 120.0 * std::sin(2 * M_PI * t / 3600.0);  // fridge/lights base
         double m = std::fmod(t, 1200.0);
         if (m >= 300 && m < 480) w += 2000.0;                          // kettle/heater cycle
@@ -78,6 +84,8 @@ private:
     double imp_, speed_, start_hour_;
     bool overload_;
     uint64_t t0_real_ = 0;
+    double wall0_ = 0;
+    std::function<double(double)> model_;
     std::atomic<bool> run_{false};
     std::atomic<double> truth_wh_{0.0};
     std::thread th_;

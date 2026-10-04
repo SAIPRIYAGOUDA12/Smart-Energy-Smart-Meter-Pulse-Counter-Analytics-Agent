@@ -52,6 +52,9 @@ public:
         : cfg_(c), sm_(c.overload_w), wall0_(wall0_s), ts0_(ts0_ns) {}
 
     void set_sink(BucketSink s) { sink_ = std::move(s); }
+    /// Optional: called for every accepted pulse with (wall-clock seconds, Wh). Feeds the usage tracker.
+    using EnergySink = std::function<void(double, double)>;
+    void set_energy_sink(EnergySink s) { energy_sink_ = std::move(s); }
     void set_source_name(std::string n) { std::lock_guard<std::mutex> l(m_); src_ = std::move(n); }
     void restore(uint64_t pulses, double energy_wh, double cost) {
         std::lock_guard<std::mutex> l(m_);
@@ -94,6 +97,7 @@ public:
         const double wall = wall_of(ts);
         const double c = wh / 1000.0 * rate_at(wall);
         energy_wh_ += wh;
+        if (energy_sink_) energy_sink_(wall, wh);
         cost_ += c;
         add_to_bucket(wall, wh, c);
     }
@@ -210,6 +214,7 @@ private:
     std::deque<Bucket> hist_;
     Bucket cur_;
     BucketSink sink_;
+    EnergySink energy_sink_;
     std::string src_;
 };
 

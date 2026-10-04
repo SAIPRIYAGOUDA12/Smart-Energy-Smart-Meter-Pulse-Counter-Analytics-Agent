@@ -124,3 +124,22 @@ Source thread (producer) → lock-free ring → main thread (consumer, 50 ms cad
 * Setup: `sudo apt install build-essential linux-libc-dev curl` → `make`.
 * Branching: `main` (stable, tagged) ← `develop` ← `feature/<name>`; PRs must pass CI (`.github/workflows/ci.yml`). Conventional commits.
 * Tracking: `docs/PROGRESS.md` (log of issues and solutions), GitHub Issues/Projects per PRD requirement ID.
+
+## 10. Smart Energy Agent extension (v2.0)
+See [SMART_AGENT.md](SMART_AGENT.md). New modules (all header-only, no change to the existing pipeline except one optional hook):
+`calendar`, `tariff`, `slab_monitor`, `appliance`, `usage_tracker`, `smart_bill`, `recommendations`, `energy_agent`, `agent_json`.
+```mermaid
+classDiagram
+  class EnergyAgent{+report(now,power) AgentReport +whatIf(name,hours,now) WhatIf}
+  class UsageTracker{+add(wall,wh) +today() +monthToDate() +baseline() +peakPeriod()}
+  class SlabTariff{slabs fixed_charge currency}
+  class Appliance{name watts hours_per_day days_per_month windows}
+  class ApplianceLoadModel{+operator()(wall) double}
+  EnergyAgent --> UsageTracker
+  EnergyAgent --> SlabTariff
+  EnergyAgent o-- Appliance
+  ApplianceLoadModel o-- Appliance
+  Analytics ..> UsageTracker : energy hook
+  SimSource ..> ApplianceLoadModel : load model
+  HttpServer --> EnergyAgent
+```

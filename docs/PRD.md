@@ -54,3 +54,16 @@ Source (`include/`, `src/`), tests (`tests/`, `scripts/system_test.sh`), docs (`
 | 4 | 4 | HAL, ring buffer, analytics, simulator prototype | working `smeterd --sim` |
 | 5 | 5 | GPIO driver path, storage, HTTP, tests, sanitizers | `docs/TESTING.md` |
 | 6 | 6 | CLI, hardware-in-loop (gpio-sim), polish, demo | v1.0 tag |
+
+## 7. Extension v2.0 - Smart Energy Agent
+| ID | Requirement | Verified by |
+|---|---|---|
+| FR-13 | Slab tariff billing, current slab, units to next slab | `tests/test_agent.cpp` (tariff) |
+| FR-14 | Smart Bill Calculator (units, days, optional previous month / daily average) | unit + `/api/bill` |
+| FR-15 | Today / yesterday / 7-day / month consumption, peak period, month-end projection and bill | tracker + agent tests |
+| FR-16 | Appliance register: watts, hours/day, days/month, monthly kWh and cost | ranking test |
+| FR-17 | "What if I save?" using appliance power and the slab tariff | what-if test |
+| FR-18 | Slab zones (green/yellow/red), spike detection, trend % | slab + spike tests |
+| FR-19 | Data-driven recommendations, savings and daily target | recommendations test |
+| FR-20 | Dashboard tabs: Live Meter, Smart Agent, What if I save?, Bill Calculator | system test |
+Details: [SMART_AGENT.md](SMART_AGENT.md).
